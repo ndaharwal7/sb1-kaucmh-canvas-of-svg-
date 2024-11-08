@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.app {
+  @apply min-h-screen flex flex-col;
+}
+
+.toolbar {
+  @apply bg-gray-800 text-white p-4 flex justify-between items-center;
+}
+
+.tool-group {
+  @apply flex gap-2;
+}
+
+.tool-group button {
+  @apply px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors;
+}
+
+.main-content {
+  @apply flex-1 flex;
+}
+
+.layers-panel {
+  @apply w-64 bg-gray-100 p-4 border-r border-gray-200;
+}
+
+.canvas-container {
+  @apply flex-1 bg-white;
+}
+
+.properties-panel {
+  @apply w-64 bg-gray-100 p-4 border-l border-gray-200;
+}
+
+.property-group {
+  @apply mb-4;
+}
+
+.property-group label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.property-group input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-md;
+}

@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/3.2.0/svg.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.draggable.js/2.2.2/svg.draggable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.select.js/3.0.1/svg.select.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --bg-color: #f3f4f6;
+            --border-color: #e5e7eb;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .toolbar {
+            background: #1a1a1a;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .toolbar button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toolbar button:hover {
+            background: var(--secondary-color);
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .layers-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .layer-item {
+            padding: 0.5rem;
+            background: white;
+            border: 1px solid var(--border-color);
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            border-radius: 0.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .layer-item:hover {
+            background: var(--bg-color);
+        }
+
+        .layer-item.selected {
+            border-color: var(--primary-color);
+        }
+
+        .canvas-container {
+            flex: 1;
+            background: white;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #svgCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .properties-panel {
+            width: 250px;
+            background: white;
+            border-left: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        .property-group {
+            margin-bottom: 1rem;
+        }
+
+        .property-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: #4b5563;
+        }
+
+        .property-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+        }
+
+        .grid-controls {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .grid-controls label {
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .grid-controls select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .svg-controls {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .svg-controls button {
+            background: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+
+        .svg-controls button:hover {
+            background: var(--bg-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="addSection">Add Section</button>
+        <button id="addSubSection">Add Sub-section</button>
+        <button id="uploadSvg">Upload SVG</button>
+        <button id="addText">Add Text</button>
+        <button id="addImage">Add Image</button>
+        <button id="exportAll">Export All</button>
+        <button id="exportSection">Export Section</button>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="grid-controls">
+                <label>Grid Type:</label>
+                <select id="gridType">
+                    <option value="horizontal">Horizontal</option>
+                    <option value="vertical">Vertical</option>
+                </select>
+                <label>Grid Size:</label>
+                <input type="number" id="gridSize" value="50" min="10" max="100">
+            </div>
+            <div class="layers-panel">
+                <h3>Layers</h3>
+                <div id="layersList"></div>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <div id="svgCanvas"></div>
+            <div class="svg-controls hidden">
+                <button id="lockElement">Lock</button>
+                <button id="deleteElement">Delete</button>
+                <button id="duplicateElement">Duplicate</button>
+                <button id="moveUp">Move Up</button>
+                <button id="moveDown">Move Down</button>
+            </div>
+        </div>
+
+        <div class="properties-panel">
+            <h3>Properties</h3>
+            <div class="property-group">
+                <label>ID:</label>
+                <input type="text" id="elementId">
+            </div>
+            <div class="property-group">
+                <label>Position X:</label>
+                <input type="number" id="posX">
+            </div>
+            <div class="property-group">
+                <label>Position Y:</label>
+                <input type="number" id="posY">
+            </div>
+            <div class="property-group">
+                <label>Width:</label>
+                <input type="number" id="width">
+            </div>
+            <div class="property-group">
+                <label>Height:</label>
+                <input type="number" id="height">
+            </div>
+            <div class="property-group">
+                <label>Fill Color:</label>
+                <input type="color" id="fillColor">
+            </div>
+            <div class="property-group">
+                <label>Stroke Color:</label>
+                <input type="color" id="strokeColor">
+            </div>
+            <div class="property-group">
+                <label>Stroke Width:</label>
+                <input type="number" id="strokeWidth" min="0" step="0.5">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SVGEditor {
+            constructor() {
+                this.draw = SVG().addTo('#svgCanvas').size('100%', '100%');
+                this.sections = new Map();
+                this.selectedElement = null;
+                this.gridType = 'horizontal';
+                this.gridSize = 50;
+                this.nextId = 1;
+                
+                this.initializeEventListeners();
+                this.setupGrid();
+            }
+
+            initializeEventListeners() {
+                document.getElementById('addSection').onclick = () => this.addSection();
+                document.getElementById('addSubSection').onclick = () => this.addSubSection();
+                document.getElementById('uploadSvg').onclick = () => this.handleSvgUpload();
+                document.getElementById('addText').onclick = () => this.addText();
+                document.getElementById('addImage').onclick = () => this.handleImageUpload();
+                document.getElementById('exportAll').onclick = () => this.exportAll();
+                document.getElementById('exportSection').onclick = () => this.exportSection();
+                
+                document.getElementById('gridType').onchange = (e) => {
+                    this.gridType = e.target.value;
+                    this.setupGrid();
+                };
+                
+                document.getElementById('gridSize').onchange = (e) => {
+                    this.gridSize = parseInt(e.target.value);
+                    this.setupGrid();
+                };
+
+                // Property panel listeners
+                ['elementId', 'posX', 'posY', 'width', 'height'].forEach(id => {
+                    document.getElementById(id).onchange = (e) => {
+                        this.updateElementProperty(id, e.target.value);
+                    };
+                });
+
+                ['fillColor', 'strokeColor', 'strokeWidth'].forEach(id => {
+                    document.getElementById(id).onchange = (e) => {
+                        this.updateElementStyle(id, e.target.value);
+                    };
+                });
+
+                // Element control listeners
+                document.getElementById('lockElement').onclick = () => this.toggleLock();
+                document.getElementById('deleteElement').onclick = () => this.deleteElement();
+                document.getElementById('duplicateElement').onclick = () => this.duplicateElement();
+                document.getElementById('moveUp').onclick = () => this.moveElement('up');
+                document.getElementById('moveDown').onclick = () => this.moveElement('down');
+            }
+
+            setupGrid() {
+                const pattern = this.draw.pattern(this.gridSize, this.gridSize, (add) => {
+                    add.line(0, 0, this.gridSize, 0).stroke({ width: 0.5, color: '#ddd' });
+                    add.line(0, 0, 0, this.gridSize).stroke({ width: 0.5, color: '#ddd' });
+                });
+
+                if (this.gridRect) this.gridRect.remove();
+                
+                this.gridRect = this.draw.rect('100%', '100%').fill(pattern);
+                this.gridRect.back();
+            }
+
+            generateUniqueId(prefix) {
+                return `${prefix}-${this.nextId++}`;
+            }
+
+            addSection() {
+                const sectionId = this.generateUniqueId('section');
+                const section = this.draw.group().attr({ id: sectionId });
+                
+                section.draggable();
+                section.on('dragend', () => this.updatePropertyPanel());
+                
+                this.sections.set(sectionId, {
+                    element: section,
+                    subsections: new Map(),
+                    type: 'section'
+                });
+                
+                this.updateLayersList();
+                this.selectElement(section);
+            }
+
+            addSubSection(parentSectionId) {
+                if (!parentSectionId) {
+                    alert('Please select a parent section first');
+                    return;
+                }
+
+                const parent = this.sections.get(parentSectionId);
+                const subSectionId = this.generateUniqueId('subsection');
+                const subSection = parent.element.group().attr({ id: subSectionId });
+                
+                subSection.draggable();
+                subSection.on('dragend', () => this.updatePropertyPanel());
+                
+                parent.subsections.set(subSectionId, {
+                    element: subSection,
+                    type: 'subsection'
+                });
+                
+                this.updateLayersList();
+                this.selectElement(subSection);
+            }
+
+            handleSvgUpload() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.svg';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const svgContent = event.target.result;
+                        this.importSvg(svgContent);
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            }
+
+            importSvg(svgContent) {
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgContent, 'image/svg+xml');
+                
+                // Process and import SVG elements
+                this.processSvgElement(svgDoc.documentElement);
+                this.updateLayersList();
+            }
+
+            processSvgElement(element, parent = null) {
+                const id = element.id || this.generateUniqueId(element.tagName.toLowerCase());
+                let newElement;
+
+                switch (element.tagName.toLowerCase()) {
+                    case 'g':
+                        newElement = parent ? parent.group() : this.draw.group();
+                        break;
+                    case 'path':
+                        newElement = (parent || this.draw).path(element.getAttribute('d'));
+                        break;
+                    case 'rect':
+                        newElement = (parent || this.draw).rect(
+                            element.getAttribute('width'),
+                            element.getAttribute('height')
+                        );
+                        break;
+                    // Add more element types as needed
+                }
+
+                if (newElement) {
+                    newElement.attr('id', id);
+                    
+                    // Copy attributes
+                    Array.from(element.attributes).forEach(attr => {
+                        if (attr.name !== 'id') {
+                            newElement.attr(attr.name, attr.value);
+                        }
+                    });
+
+                    // Make draggable
+                    newElement.draggable();
+
+                    // Process children
+                    Array.from(element.children).forEach(child => {
+                        this.processSvgElement(child, newElement);
+                    });
+
+                    return newElement;
+                }
+            }
+
+            addText() {
+                const text = this.draw.text('Double click to edit')
+                    .attr({
+                        id: this.generateUniqueId('text'),
+                        'font-family': 'Arial',
+                        'font-size': 16
+                    })
+                    .draggable();
+
+                text.on('dblclick', () => {
+                    const newText = prompt('Enter text:', text.text());
+                    if (newText !== null) {
+                        text.text(newText);
+                    }
+                });
+
+                this.selectElement(text);
+                this.updateLayersList();
+            }
+
+            handleImageUpload() {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const image = this.draw.image(event.target.result)
+                            .attr({ id: this.generateUniqueId('image') })
+                            .draggable();
+                        
+                        this.selectElement(image);
+                        this.updateLayersList();
+                    };
+                    reader.readAsDataURL(file);
+                };
+                input.click();
+            }
+
+            exportAll() {
+                const svgContent = this.draw.svg();
+                const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+                saveAs(blob, 'canvas.svg');
+            }
+
+            exportSection(sectionId) {
+                if (!sectionId) {
+                    alert('Please select a section to export');
+                    return;
+                }
+
+                const section = this.sections.get(sectionId);
+                const svgContent = section.element.svg();
+                const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+                saveAs(blob, `${sectionId}.svg`);
+            }
+
+            updateElementProperty(property, value) {
+                if (!this.selectedElement) return;
+
+                switch (property) {
+                    case 'elementId':
+                        this.selectedElement.attr('id', value);
+                        this.updateLayersList();
+                        break;
+                    case 'posX':
+                    case 'posY':
+                        const x = property === 'posX' ? value : this.selectedElement.x();
+                        const y = property === 'posY' ? value : this.selectedElement.y();
+                        this.selectedElement.move(x, y);
+                        break;
+                    case 'width':
+                    case 'height':
+                        this.selectedElement.size(
+                            property === 'width' ? value : this.selectedElement.width(),
+                            property === 'height' ? value : this.selectedElement.height()
+                        );
+                        break;
+                }
+            }
+
+            updateElementStyle(property, value) {
+                if (!this.selectedElement) return;
+
+                switch (property) {
+                    case 'fillColor':
+                        this.selectedElement.fill(value);
+                        break;
+                    case 'strokeColor':
+                        this.selectedElement.stroke({ color: value });
+                        break;
+                    case 'strokeWidth':
+                        this.selectedElement.stroke({ width: value });
+                        break;
+                }
+            }
+
+            updateLayersList() {
+                const layersList = document.getElementById('layersList');
+                layersList.innerHTML = '';
+
+                // Add sections and their contents
+                this.sections.forEach((section, id) => {
+                    const sectionItem = this.createLayerItem(section.element, id);
+                    layersList.appendChild(sectionItem);
+
+                    // Add subsections
+                    section.subsections.forEach((subsection, subId) => {
+                        const subsectionItem = this.createLayerItem(subsection.element, subId, true);
+                        layersList.appendChild(subsectionItem);
+                    });
+                });
+            }
+
+            createLayerItem(element, id, isSubsection = false) {
+                const item = document.createElement('div');
+                item.className = 'layer-item';
+                if (isSubsection) item.style.marginLeft = '1.5rem';
+                
+                const label = document.createElement('span');
+                label.textContent = id;
+                item.appendChild(label);
+
+                const controls = document.createElement('div');
+                controls.className = 'layer-controls';
+                
+                ['↑', '↓', '×'].forEach(symbol => {
+                    const button = document.createElement('button');
+                    button.textContent = symbol;
+                    button.onclick = (e) => {
+                        e.stopPropagation();
+                        switch (symbol) {
+                            case '↑': this.moveElement('up', element); break;
+                            case '↓': this.moveElement('down', element); break;
+                            case '×': this.deleteElement(element); break;
+                        }
+                    };
+                    controls.appendChild(button);
+                });
+
+                item.appendChild(controls);
+                item.onclick = () => this.selectElement(element);
+
+                return item;
+            }
+
+            selectElement(element) {
+                if (this.selectedElement) {
+                    this.selectedElement.removeClass('selected');
+                }
+                
+                this.selectedElement = element;
+                element.addClass('selected');
+                
+                document.querySelector('.svg-controls').classList.remove('hidden');
+                this.updatePropertyPanel();
+            }
+
+            updatePropertyPanel() {
+                if (!this.selectedElement) return;
+
+                const element = this.selectedElement;
+                
+                document.getElementById('elementId').value = element.attr('id') || '';
+                document.getElementById('posX').value = element.x() || 0;
+                document.getElementById('posY').value = element.y() || 0;
+                document.getElementById('width').value = element.width() || 0;
+                document.getElementById('height').value = element.height() || 0;
+                document.getElementById('fillColor').value = element.fill() || '#000000';
+                document.getElementById('strokeColor').value = element.stroke().color || '#000000';
+                document.getElementById('strokeWidth').value = element.stroke().width || 1;
+            }
+
+            toggleLock() {
+                if (!this.selectedElement) return;
+                
+                const isLocked = this.selectedElement.hasClass('locked');
+                if (isLocked) {
+                    this.selectedElement.removeClass('locked');
+                    this.selectedElement.draggable(true);
+                } else {
+                    this.selectedElement.addClass('locked');
+                    this.selectedElement.draggable(false);
+                }
+            }
+
+            deleteElement(element = null) {
+                const target = element || this.selectedElement;
+                if (!target) return;
+
+                target.remove();
+                if (target === this.selectedElement) {
+                    this.selectedElement = null;
+                    document.querySelector('.svg-controls').classList.add('hidden');
+                }
+                
+                this.updateLayersList();
+            }
+
+            duplicateElement() {
+                if (!this.selectedElement) return;
+
+                const clone = this.selectedElement.clone()
+                    .attr('id', this.generateUniqueId(this.selectedElement.type()))
+                    .move(
+                        this.selectedElement.x() + 10,
+                        this.selectedElement.y() + 10
+                    )
+                    .draggable();
+
+                this.selectElement(clone);
+                this.updateLayersList();
+            }
+
+            moveElement(direction, element = null) {
+                const target = element || this.selectedElement;
+                if (!target) return;
+
+                if (direction === 'up') {
+                    target.forward();
+                } else {
+                    target.backward();
+                }
+                
+                this.updateLayersList();
+            }
+        }
+
+        // Initialize the editor when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.editor = new SVGEditor();
+        });
+    </script>
+</body>
+</html>
